@@ -1,0 +1,109 @@
+Don't Bomb Or Be Bombed Documentation
+1. The Global Architecture Philosophy
+	1.1 Hierarchies
+2. The Engine
+	2.1 Function calling & initialization
+	2.2 Rendering specifications
+3. The Hooks
+	3.1 Engine and logic permissions
+	3.2 Function Hooks
+	3.3 Variable Hooks
+	3.4 Object Hooks
+
+4. The Logic/Mod
+	4.1 Customization
+	 
+--- 1. THE GLOBAL ARCHITECTURE PHILOSOPHY ---
+This game serves more as an exercise for understanding Quake 1's architecture than anything else
+(although the game is cool too). By my understanding, the game is divided in two pieces (disregarding
+the server part). The engine and the logic. In Quake 1, the engine handles both the rendering and the 
+physics. The logic handles the entity behaviors (entities are basically everything you see in the game.
+For entities to actually interact with one another (a.k.a. the game itself), it has to "talk" with the 
+engine in order to handle their behaviors (so collision detection and resolution, path finding,
+trajectory calculations, etc.) and their rendering (current model, animation frame, special fx, etc.).
+This is done by using and interface, that is predefined. In my game, I call this interface "Hooks". 
+The mental image is a fisherman catching a fish with his hook. They can't talk to each other, so the
+fisherman uses a fishing line with a customized hook (but still a hook) to get the fish he wants. In
+actual terms, the engine and the logic both agree on predefined functions, variables and objects to 
+both write and read to. The cool thing is that you can put whatever you want in these hooks, but you
+have to implement them. For example, every object has to implement the hook object class, because that
+class contains all of the variables needed for the engine to render the objects like position, image,
+visibility, etc. This means that none of your custom objects will see the engine variables or its methods
+and the engine will never see your custom objects. For example, I have decided that the logic file
+never gets access to any rendering resources like pygame or that the engine never gets to read the next
+animation frame of a module, only the current image. Also, the engine should be considered like a black
+box to any mod maker. It will always run through the same functions in the same order no matter what.
+You can only ever change the game logic and you must always include the predefined hook names, but you
+can put whatever you want in the hook' content. For example, you must always have the object called 
+"ScreenObject" and define all of its variables (type like int, string, list, etc. included), but you
+can always give whatever X or Y coordinate you want or you could even add a Z coordinate! Although that
+will not be read by the engine. There are some pretty constrained methods like "LoadImagesToEngine" that
+have to give specific outputs, but the specifics will be explained in the hooks section. In the end, the
+philosphy boils down to separating the hard-coded engine with the logic in order to facilitate mod
+making and readability.
+
+- 1.1 Hierarchies - 
+Every part of the game is part of a hierarchy. Here is the structure:
+
+Engine 
+|-> Hook Functions
+    |-> Hook Variables
+    |-> Hook Objects
+    |-> Game Mod
+	|-> Hook Objects*
+	|-> Hook Variables*	
+
+To keep a clear chain, every part of the game can only import other parts that are on the same level 
+or one level below. For example, hook variables can import hook objects, but cannot import hook
+functions.
+
+"Game Mod" in this hierarchy can be many python files if you want it to be. In fact, that is the case
+in the base game. But every one of those files is obliged to import either hook objects, hook variables
+or both depending on the situation. For example, if you want to make a new object, it has to have
+"ScreenObject" as its parent object. Or if you want to make any operations that affect the game globally
+like reducing the bomb time, you have to do it through hook variables and not some local variable.
+
+--- 2. THE ENGINE ---
+The engine is what allows all of the stuff in the game to interact with each other and to render.
+
+- 2.1 Function calling & initialization -
+The engine always calls the same functions in the same order. You can see it in the source code. Here 
+is the overview in order: Import pygame and hook functions. Initialize variables like the surfaces to
+draw to and loop handlers (run and clock). Define rendering functions. Define initialization functions.
+Initialize all of the needed values like loading in the images. Inside the run loop: Call input 
+handling, logic updating and drawing functions. 
+
+- 2.2 Rendering specifications -
+The engine uses Opengl normalized 2d coordinates to render. They range from -1 to 1, 0 being the center.
+Although, sprites use pixel width and height. Rotations are also in degrees and not radians and are by
+default done from the center of the object. The "actual" game surface is actually a small square with a 
+size defined by game logic, but by default 228x136. This is done because the sprites do not use
+normalized size specifications.	
+ 
+
+--- 3. THE HOOKS ---
+The hooks are the interface between the engine and the logic. They are what allows the communication
+between these two parts of the game. They take on three parts: Variable hooks, object hooks and function
+hooks.
+
+- 3.1 Engine and Logic permissions -
+The engine and logic can only access certain parts of the hooks. They are selected based on avoiding
+circular imports and improving consistency.
+
+The engine has access to:
+	- The hook functions
+
+The logic has access to :
+	- The hook variables
+	- The hook objects
+
+The engine has only access to the hook functions and not any of its imports. The logic only has access
+to the variables and objects, but can't trigger any hook functions. It is also important to note that
+the engine technically has access to the hook objects and variables, but it is indirect by the fact that
+the hook functions decide what gets given.
+
+- 3.2 Function Hooks -
+This hook type is in the second highest level in the hierarchy (the first being the engine). This means
+that 
+
+  
