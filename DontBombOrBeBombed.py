@@ -1,12 +1,12 @@
 #Import dependencies
 import pygame
+
 import os
 from pygame.locals import *
 #All of the game logic is contained in the mods folder, whichever mod is chosen. By default, it is BaseMod
 from Mods.BaseMod import *
 import time
 import math
-import Mods.BaseMod.HookFunctions as HookVars
 from Mods.BaseMod.HookFunctions import *
 
 #Initializes pygame, something that it wants to do for some reason. Not important to the logic.
@@ -21,10 +21,16 @@ ScreenSize = pygame.display.Info()
 GameScale = (228,136)
 
 #Sets the display GameWindowdow size. Defaulted to fullscreen
-DisplayGameWindow = pygame.display.set_mode((ScreenSize.current_w,ScreenSize.current_h))
+#NOTE: By FAR the biggest contributor to performance hit.
+#DisplayGameWindow = pygame.display.set_mode((ScreenSize.current_w,ScreenSize.current_h))
+#DisplayGameWindow = pygame.display.set_mode((ScreenSize.current_w/15,ScreenSize.current_h/15), pygame.FULLSCREEN | pygame.SCALED)
+ScaleFactorDisplayGameWindow = max(ScreenSize.current_w/GameScale[0],ScreenSize.current_h/GameScale[1])
+
+
+DisplayGameWindow = pygame.display.set_mode((ScreenSize.current_w/ScaleFactorDisplayGameWindow, ScreenSize.current_h/ScaleFactorDisplayGameWindow), pygame.FULLSCREEN | pygame.SCALED)
 
 #Makes a pygame "surface". This is essentially an image. The scale is 16:9
-GameWindow = pygame.Surface(GameScale)
+GameWindow = pygame.Surface(GameScale, pygame.SRCALPHA)
 
 #Key: An image's file path, Value: A surface object created by pygame.image.load() (effectively a loaded picture)
 LoadedImages = {}
@@ -36,15 +42,11 @@ pygame.display.set_caption("DontBombOrBeBombed")
 #Because the logic updates (ticks) and the graphical updates (frames) are linked (choice made by me), making the game run unchained will make it go MUCH faster than it is supposed to be.
 clock = pygame.time.Clock()
 
-#TODO: Remove this. Each object will have its own path to a picture. instead, call "draw sprites" to get all of the pictures and their positions
-#LEDLights = (pygame.image.load(os.path.join(os.path.dirname(__file__), 'Sprites','LED_RED.png')).convert_alpha(), pygame.image.load(os.path.join(os.path.dirname(__file__), 'Sprites','LED_GREEN.png')).convert_alpha(), pygame.image.load(os.path.join(os.path.dirname(__file__), 'Sprites','LED_BLUE.png')).convert_alpha(), pygame.image.load(os.path.join(os.path.dirname(__file__), 'Sprites','LED_OFF.png')).convert_alpha())
-
 #run is what makes the while loop run
 run = True
 
 #The scale factor of the game so that it looks the same on all displays
 ScaleFactor = min(DisplayGameWindow.get_size()[0]/GameWindow.get_size()[0], DisplayGameWindow.get_size()[1]/GameWindow.get_size()[1])
-
 
 
 #Checks if the game fills the screen in width
@@ -76,12 +78,14 @@ ColorChangeFactor = [0,0,0]
 #Counts up to X ticks to calculate a new backround color
 BackRoundColorTickCounter = 0
 
-#Converts normalized screen coordinates (-1 , 1) to the actual screen coordinates
+#A list of pre loaded shaders. It is actually just a list of multiple lists that contain pygame surfaces that each represent a frame of their respective shader
+PreLoadedShadersList = []
 
-#def GetScreenCoordinates(ThisScreenObject : ScreenObject, ParentSurface : pygame.Surface):
-    #return((ThisScreenObject.X/2.0 + 0.5)*ParentSurface.get_size()[0], ((ThisScreenObject.Y)/2.0 + 0.5)*ParentSurface.get_size()[1])
+#All of the shaders loaded into surfaces. Each element is a list of surfaces that each represent a frame of a shader
+ShaderSurfacesList = []
 
 def RenderScreen(ParentSurface, ThisScreenObjectArray) :
+
     #print(str(ThisScreenObjectArray))
     if len(ThisScreenObjectArray) != 0 :
         for ThisScreenObject in ThisScreenObjectArray :
@@ -90,7 +94,6 @@ def RenderScreen(ParentSurface, ThisScreenObjectArray) :
             if ThisScreenObject.Visible :
                 #Get the screen coordinates of the screen object
                 ThisScreenObjectCoordinates = GetScreenCoordinates(ThisScreenObject.X, ThisScreenObject.Y, ParentSurface.get_size()[0], ParentSurface.get_size()[1])
-
                 #Get the loaded pygame picture and copy it 
                 ThisObjectPicture = LoadedImages[ThisScreenObject.Image].copy()
 
@@ -106,6 +109,7 @@ def RenderScreen(ParentSurface, ThisScreenObjectArray) :
                     ParentSurface.blit(ThisObjectPicture, CenterPoint)
                 else :
                     ParentSurface.blit(ThisObjectPicture, ThisScreenObjectCoordinates)
+   
 
 #Loads all of the images into pygame        
 def LoadAllImages() :
@@ -116,53 +120,137 @@ def LoadAllImages() :
         #Append
         LoadedImages[ThisPicture] = pygame.image.load(ThisPicture).convert_alpha()
         testvar = pygame.image.load(ThisPicture).convert_alpha()
+  
         testvar.get_rect().topleft
 
 def CalculateultrasonicDistance() :
     return 1000
 
 
-def BackroundShader(SurfaceIn) :
+"""
+
+-------------------------------
+DEPRECATED METHODS
+-------------------------------
+
+
+def SurfaceSizeToPixelArraySize(ParentSurface, PixelArray) :
+
+    SurfaceScaleX = len(PixelArray)/ParentSurface.get_size()[0]
+    SurfaceScaleY = len(PixelArray[0])/ParentSurface.get_size()[1]
+
+    ResizedSurface = pygame.Surface((len(PixelArray)/SurfaceScaleX,len(PixelArray[0])/SurfaceScaleY))
+
+    return ResizedSurface
+"""
+
+"""
+def SetShaderResolution(ParentSurface) :
+
+    Resolution = GetBackroundShaderSize()
+    SurfaceScale = max(ParentSurface.get_size()[0]/Resolution, ParentSurface.get_size()[1]/Resolution)
+    ShaderSurface = pygame.Surface((ParentSurface.get_size()[0]/SurfaceScale,ParentSurface.get_size()[1]/SurfaceScale))
+    #ShaderSurface = pygame.Surface((Resolution,Resolution))
+
+    return ShaderSurface
+
+
+def DisplayShader(SurfaceIn) :
+    if SurfaceIn.get_size()[0] != GetBackroundShaderSize() or SurfaceIn.get_size()[1] != GetBackroundShaderSize():
+        SetShaderResolution(SurfaceIn)
+    
+    ShaderPixels = GetBackroundShader(SurfaceIn.get_size()) 
+    #print("FIRST",len(ShaderPixels[0]), len(ShaderPixels), SurfaceIn.get_size()[0], SurfaceIn.get_size()[1])
+            
     pxarray = pygame.PixelArray(SurfaceIn)
 
-    for PixelY in range(0, SurfaceIn.get_size()[1]) :
-        for PixelX in range(0, SurfaceIn.get_size()[0]) :
-            uvX = PixelX/SurfaceIn.get_size()[0]
-            uvY = PixelY/SurfaceIn.get_size()[1]
-            #global BombTime
-            #The closer to 0, the less time is left
-            TimeLeftFactor= 1.0 - (GetPerceivedBombTime())/float(GetBombTime())
-            #print(GetBombTime())
-            PixelColorR = (0.5 + 0.5*math.cos(pygame.time.get_ticks()/1000+uvX))*TimeLeftFactor
-            PixelColorG = (0.5 + 0.5*math.cos(pygame.time.get_ticks()/1000+uvY+2))*TimeLeftFactor
-            PixelColorB = (0.5 + 0.5*math.cos(pygame.time.get_ticks()/1000+uvX+4))*TimeLeftFactor
-            pxarray[PixelX, PixelY] = (max(0,PixelColorR*255), max(0,PixelColorG*255), max(0,PixelColorB*255))
+
+    #print("SECOND",len(ShaderPixels[0]), len(ShaderPixels), SurfaceIn.get_size()[0], SurfaceIn.get_size()[1])
     
+    for PosY in range(0,len(ShaderPixels)) :
+  
+        for PosX in range(0,len(ShaderPixels[PosY])) :
+            #print(ShaderPixels[PosY][PosX])
+            #print(str(PosX )+ ", " + str(PosY))
+            pxarray[PosX, PosY] = tuple(ShaderPixels[PosY][PosX]) 
+    pxarray.close()
+"""
+#TODO: get away from loading ALL of the frames into pygame surfaces, because it uses way too much RAM (150 pixels for 2 @ 60fps uses 6 gigs of RAM). 
+def FrameToSurface(PixelArray) :
+    global DisplayGameWindow
+
+    ThisSurface = pygame.Surface(SetBackroundSurfaceSize(DisplayGameWindow.get_size()))
+    pxarray = pygame.PixelArray(ThisSurface)
+
+    for PosY in range(0,len(PixelArray)) :
+  
+        for PosX in range(0,len(PixelArray[PosY])) :
+            #print(ShaderPixels[PosY][PosX])
+            #print(str(PosX )+ ", " + str(PosY))
+            pxarray[PosX, PosY] = tuple(PixelArray[PosY][PosX])
     pxarray.close()
 
+    return ThisSurface
+
+def LoadAllShaders() :
+    
+    NumberOfShaders = GetNumberOfShaders()
+    for ShaderIterator in range(0,NumberOfShaders) :
+
+        ThisShaderPixelFrames = LoadShader(ShaderIterator, SetBackroundSurfaceSize(DisplayGameWindow.get_size()))
+        ThisShaderSurfaceFrames = []
+        
+        for ThisFrame in ThisShaderPixelFrames :
+
+            NewFrameSurface = FrameToSurface(ThisFrame)
+            ThisShaderSurfaceFrames.append(NewFrameSurface)
+
+        ShaderSurfacesList.append(ThisShaderSurfaceFrames)
+
+    return ShaderSurfacesList
+
+def DisplayShader(SurfaceIn, TicksIn) :
+
+    ShaderSurface = ShaderSurfacesList[GetShaderIndex()][(int(TicksIn)%(len(ShaderSurfacesList[GetShaderIndex()])))]
+
+    #print((int(TicksIn)%(len(ShaderSurfacesList[GetShaderIndex()]))))
+    SurfaceIn.blit(pygame.transform.smoothscale_by(ShaderSurface, (SurfaceIn.get_size()[0]/ShaderSurface.get_size()[0], SurfaceIn.get_size()[1]/ShaderSurface.get_size()[1])), (0,0))
+
 LoadAllImages()
+
 
 
 InitializeObjects(1, GameWindow.get_size())
 #time.sleep(1)
 
+#ColorSurfaceScale = max(DisplayGameWindow.get_size()[0]/30, DisplayGameWindow.get_size()[1]/30)
+#ColorSurface = pygame.Surface((DisplayGameWindow.get_size()[0]/ColorSurfaceScale,DisplayGameWindow.get_size()[1]/ColorSurfaceScale))
+#ColorSurface = pygame.Surface((805/3,453/3))
+
+#The game time in microseconds. It is not real execution time, instead, it is calculated by the amount of updates.
+GameTime = 0.0
+GameTicks = 0
+
+LoadAllShaders()
 
 while run:
 
     #Won
     if ThisGameState == 1 :
         print("You won")
-        quit()
+        run = False
+
     #Lost
     elif ThisGameState == 2 :
 
         print("You lost")
-        quit()
+        run = False
 
     elif ThisGameState == 0 :
         # handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                pygame.quit()
                 run = False
         
 
@@ -186,7 +274,10 @@ while run:
         MousePosition = list(pygame.mouse.get_pos())
         MousePosition[0] = MousePosition[0] - GameWindowOffset[0]
         MousePosition[1] = MousePosition[1] - GameWindowOffset[1]
-        ThisGameState = UpdateLogic(MousePosition, MouseIsPressed, ButtonsPressed, DistanceMesured, TiltSensorState, KeyPadPressedButtons, list(GameWindow.get_rect().size), ScaleFactor, pygame.time.get_ticks())
+        ThisGameState = UpdateLogic(MousePosition, MouseIsPressed, ButtonsPressed, DistanceMesured, TiltSensorState, KeyPadPressedButtons, list(GameWindow.get_rect().size), ScaleFactor, GameTime)
+        DisplayShader(DisplayGameWindow, GameTicks)
+        GameTicks = GameTicks + 1
+        GameTime = GameTime + 1000.0/60.0
 
         # clear surface. Mo need to do it for the actual display, because this surface covers the entirety of the display.
         #GameWindow.fill((pygame.time.get_ticks()%255, 100, 100))
@@ -194,45 +285,28 @@ while run:
         # draw game objects
         # [...]
         #return (self.X, self.Y, self.Image, WireRenderInformation)
-        """
-        if BackRoundColorTickCounter == 60 :
-            CurrentBackroundColor = FutureBackroundColor.copy()
-            FutureBackroundColor = [(pygame.time.get_ticks()+random.randint(0,255))%255, (pygame.time.get_ticks()+random.randint(0,255))%255, (pygame.time.get_ticks()+random.randint(0,255))%255]
-            ColorChangeFactor = [(FutureBackroundColor[0]-CurrentBackroundColor[0])/60, (FutureBackroundColor[1]-CurrentBackroundColor[1])/60, (FutureBackroundColor[2]-CurrentBackroundColor[2])/60]
-            BackRoundColorTickCounter = 0
-
-        BackRoundColorTickCounter = BackRoundColorTickCounter + 1
-        
-
-        RoundedFillColor = CurrentBackroundColor.copy()
-        RoundedFillColor[0] = int(RoundedFillColor[0])
-        RoundedFillColor[1] = int(RoundedFillColor[1])
-        RoundedFillColor[2] = int(RoundedFillColor[2])
-
-        DisplayGameWindow.fill(RoundedFillColor)
-        CurrentBackroundColor = [CurrentBackroundColor[0] + ColorChangeFactor[0] , CurrentBackroundColor[1] + ColorChangeFactor[1], CurrentBackroundColor[2] + ColorChangeFactor[2]]      
-        """
-
-        #Cool shader taken from shader toy to make the backround
-        #Small screen because if using actual full resolution, python falls to its knees
-        ColorSurface = pygame.Surface((2,2))
-
-        BackroundShader(ColorSurface)
 
         RenderScreen(GameWindow, ScreenObject.ScreenObjectsArray)
         
         #DisplayGameWindow.fill((pygame.time.get_ticks()+random.randint(0,255))%255, (pygame.time.get_ticks()+random.randint(0,255))%255, (pygame.time.get_ticks()+random.randint(0,255))%255)
-        
-
+    
  
         #Now draw the surface that contains all of the images on it to the display. Also scale it before that.
-        DisplayGameWindow.blit(pygame.transform.smoothscale_by(ColorSurface, (DisplayGameWindow.get_size()[0]/ColorSurface.get_size()[0], DisplayGameWindow.get_size()[1]/ColorSurface.get_size()[1])), (0,0))
-        DisplayGameWindow.blit(pygame.transform.scale_by(GameWindow, (ScaleFactor)), GameWindowOffset)
+        
+        #DisplayGameWindow.blit(pygame.transform.scale_by(GameWindow, (ScaleFactor)), GameWindowOffset)
 
         # update display
         pygame.display.flip()
 
         # limit frames per second
         clock.tick(60) 
+        print(clock.get_fps())
 
-pygame.quit()
+    if not run :
+        ShaderSurfacesList.clear()
+        LoadedImages.clear()
+        GameWindow = None
+        DisplayGameWindow = None
+        pygame.display.quit()
+        pygame.quit()
+
